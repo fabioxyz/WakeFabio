@@ -196,7 +196,7 @@ final class ScannerSessionViewController: UIViewController, AVCaptureMetadataOut
     var mode: ScannerMode?
     var onMismatch: ((String) -> Void)?
     
-    private var captureSession: AVCaptureSession?
+    private let captureSession = AVCaptureSession()
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var hasHandledCallback: Bool = false
     private let sessionQueue = DispatchQueue(label: "com.wakefabio.scannerQueue")
@@ -214,6 +214,7 @@ final class ScannerSessionViewController: UIViewController, AVCaptureMetadataOut
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        hasHandledCallback = true
         stopSession()
     }
     
@@ -225,7 +226,7 @@ final class ScannerSessionViewController: UIViewController, AVCaptureMetadataOut
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             
-            let session = AVCaptureSession()
+            let session = self.captureSession
             guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else {
                 print("[Scanner] Câmara não disponível no hardware (ex: Simulador)")
                 return
@@ -258,7 +259,6 @@ final class ScannerSessionViewController: UIViewController, AVCaptureMetadataOut
                 }
                 
                 session.startRunning()
-                self.captureSession = session
             } catch {
                 print("[Scanner] Erro ao inicializar captura: \(error)")
             }
@@ -266,11 +266,13 @@ final class ScannerSessionViewController: UIViewController, AVCaptureMetadataOut
     }
     
     private func stopSession() {
-        sessionQueue.async { [weak self] in
-            if self?.captureSession?.isRunning == true {
-                self?.captureSession?.stopRunning()
+        // deinit also calls this: never create a weak reference to a controller
+        // that is already deallocating. Keep only the session alive for cleanup.
+        let session = captureSession
+        sessionQueue.async {
+            if session.isRunning {
+                session.stopRunning()
             }
-            self?.captureSession = nil
         }
     }
     
