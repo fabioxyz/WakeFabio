@@ -1,0 +1,54 @@
+name: WakeFabio
+options:
+  bundleIdPrefix: com.personal
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.0"
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGN_IDENTITY: ""
+  configs:
+    Debug:
+      ENABLE_TESTABILITY: "YES"
+targets:
+  WakeFabio:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: WakeFabio/Sources
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.personal.wakefabio
+      INFOPLIST_FILE: WakeFabio/Info.plist
+      GENERATE_INFOPLIST_FILE: "NO"
+      TARGETED_DEVICE_FAMILY: "1"
+  WakeFabioTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: WakeFabioTests
+    dependencies:
+      - target: WakeFabio
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.personal.wakefabio.tests
+      GENERATE_INFOPLIST_FILE: "YES"
+      TEST_HOST: "$(BUILT_PRODUCTS_DIR)/WakeFabio.app/WakeFabio"
+      BUNDLE_LOADER: "$(TEST_HOST)"
+      TARGETED_DEVICE_FAMILY: "1"
+schemes:
+  WakeFabio:
+    build:
+      targets:
+        WakeFabio: all
+        WakeFabioTests: [test]
+    test:
+      config: Debug
+      targets:
+        - WakeFabioTests

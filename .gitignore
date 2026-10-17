@@ -1,0 +1,8 @@
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+*.ipa
+*.xcresult/
+.DS_Store
+WakeFabio/Resources/Sounds/

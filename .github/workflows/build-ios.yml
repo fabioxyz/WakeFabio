@@ -1,0 +1,132 @@
+name: Build WakeFabio iOS (Unsigned)
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Test, Build & Package WakeFabio Unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Require Xcode and iOS SDK 26 or Later
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          XCODE_VERSION="$(xcodebuild -version | awk 'NR == 1 {print $2}')"
+          SDK_VERSION="$(xcodebuild -version -sdk iphoneos SDKVersion)"
+          if (( ${XCODE_VERSION%%.*} < 26 || ${SDK_VERSION%%.*} < 26 )); then
+            echo "::error::WakeFabio requires Xcode 26+ and iOS SDK 26+."
+            exit 1
+          fi
+          echo "IOS_SDK_MAJOR=${SDK_VERSION%%.*}" >> "$GITHUB_ENV"
+
+      - name: Generate Project and Shared Test Scheme
+        run: |
+          set -euo pipefail
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen generate --spec project.yml
+          test -f WakeFabio.xcodeproj/xcshareddata/xcschemes/WakeFabio.xcscheme
+          xcodebuild -list -project WakeFabio.xcodeproj
+
+      - name: Select an Installed iPhone Simulator
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/simulators.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'simulators.json').read_text())['devices']
+          candidates = []
+          sdk_major = int(os.environ['IOS_SDK_MAJOR'])
+          for runtime, entries in devices.items():
+              version = re.search(r'\.iOS-(\d+)-(\d+)', runtime)
+              if not version or int(version[1]) != sdk_major:
+                  continue
+              for device in entries:
+                  if device.get('isAvailable') and device['name'].startswith('iPhone'):
+                      candidates.append(((int(version[1]), int(version[2])), device))
+          if not candidates:
+              raise SystemExit('No available iPhone simulator matches the selected iOS SDK.')
+          _, device = max(candidates, key=lambda entry: (entry[0], entry[1]['name']))
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write(f"SIMULATOR_ID={device['udid']}\n")
+          print(f"Selected {device['name']} ({device['udid']})")
+          PY
+
+      - name: Run Unit Tests (Simulator)
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project WakeFabio.xcodeproj \
+            -scheme WakeFabio \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -destination-timeout 120 \
+            -derivedDataPath build \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Build Release iPhoneOS (Unsigned)
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project WakeFabio.xcodeproj \
+            -scheme WakeFabio \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Validate and Package Unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="build/Build/Products/Release-iphoneos/WakeFabio.app"
+          test -d "$APP_PATH"
+          plutil -lint "$APP_PATH/Info.plist"
+          EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
+          test -n "$EXECUTABLE"
+          test -x "$APP_PATH/$EXECUTABLE"
+          /usr/libexec/PlistBuddy -c 'Print :NSAlarmKitUsageDescription' "$APP_PATH/Info.plist"
+          mkdir Payload
+          ditto "$APP_PATH" Payload/WakeFabio.app
+          zip -qr WakeFabio-unsigned.ipa Payload
+          unzip -t WakeFabio-unsigned.ipa
+
+      - name: Upload Test Results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: WakeFabio-test-results
+          path: TestResults.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload Unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: WakeFabio-unsigned-IPA
+          path: WakeFabio-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
