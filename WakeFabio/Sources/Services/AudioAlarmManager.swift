@@ -14,6 +14,7 @@ public final class AudioAlarmManager: NSObject, ObservableObject, AVAudioPlayerD
     @Published public var isAlarmRinging: Bool = false
     @Published public var isPreviewPlaying: Bool = false
     @Published public var currentlyPreviewedSound: String? = nil
+    @Published public var lastAudioError: String? = nil
     
     public override init() {
         super.init()
@@ -23,7 +24,9 @@ public final class AudioAlarmManager: NSObject, ObservableObject, AVAudioPlayerD
     
     deinit {
         NotificationCenter.default.removeObserver(self)
-        stopAll()
+        alarmPlayer?.stop()
+        previewPlayer?.stop()
+        sfxPlayer?.stop()
     }
     
     private func configureAudioSession() {
@@ -71,8 +74,8 @@ public final class AudioAlarmManager: NSObject, ObservableObject, AVAudioPlayerD
     public func playAlarm(soundName: String = "loud1.mp3") {
         stopPreview()
         
-        let (resource, ext) = parseSoundName(soundName)
-        guard let url = Bundle.main.url(forResource: resource, withExtension: ext) else {
+        configureAudioSession()
+        guard let url = AlarmSoundCatalog.url(for: soundName) else {
             print("[Audio] Som de alarme não encontrado: \(soundName). Usando alerta sonoro do sistema.")
             AudioServicesPlaySystemSound(1005)
             DispatchQueue.main.async { self.isAlarmRinging = true }
@@ -140,9 +143,10 @@ public final class AudioAlarmManager: NSObject, ObservableObject, AVAudioPlayerD
         }
         
         stopPreview()
-        let (resource, ext) = parseSoundName(soundName)
-        guard let url = Bundle.main.url(forResource: resource, withExtension: ext) else {
-            print("[Audio] Ficheiro de preview não encontrado: \(soundName)")
+        lastAudioError = nil
+        configureAudioSession()
+        guard let url = AlarmSoundCatalog.url(for: soundName) else {
+            lastAudioError = "Não foi possível encontrar este toque."
             return
         }
         
@@ -152,24 +156,24 @@ public final class AudioAlarmManager: NSObject, ObservableObject, AVAudioPlayerD
             previewPlayer?.numberOfLoops = 0
             previewPlayer?.volume = 0.8
             previewPlayer?.prepareToPlay()
-            previewPlayer?.play()
-            
-            DispatchQueue.main.async {
-                self.isPreviewPlaying = true
-                self.currentlyPreviewedSound = soundName
+            guard previewPlayer?.play() == true else {
+                stopPreview()
+                lastAudioError = "Não foi possível reproduzir o toque. Tenta novamente."
+                return
             }
+            isPreviewPlaying = true
+            currentlyPreviewedSound = soundName
         } catch {
-            print("[Audio] Erro ao iniciar preview: \(error)")
+            stopPreview()
+            lastAudioError = "Não foi possível reproduzir o toque: \(error.localizedDescription)"
         }
     }
     
     public func stopPreview() {
         previewPlayer?.stop()
         previewPlayer = nil
-        DispatchQueue.main.async {
-            self.isPreviewPlaying = false
-            self.currentlyPreviewedSound = nil
-        }
+        isPreviewPlaying = false
+        currentlyPreviewedSound = nil
     }
     
     public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -194,13 +198,5 @@ public final class AudioAlarmManager: NSObject, ObservableObject, AVAudioPlayerD
         return (resource, ext)
     }
     
-    public static let availableSounds: [(name: String, title: String)] = [
-        ("loud1.mp3", "Loud Alarm 1 (Principal)"),
-        ("loud2.mp3", "Loud Alarm 2"),
-        ("analog_alarm.mp3", "Despertador Clássico Analógico"),
-        ("digital_alarm.mp3", "Beep Digital"),
-        ("morning_park.mp3", "Manhã Suave no Parque"),
-        ("rooster.mp3", "Galo Matinal"),
-        ("siren.mp3", "Sirene de Emergência")
-    ]
+    public static let availableSounds = AlarmSoundCatalog.sounds
 }

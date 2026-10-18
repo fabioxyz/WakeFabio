@@ -349,6 +349,24 @@ final class AlarmSchedulerTests: XCTestCase {
         XCTAssertEqual(mockKit.scheduledAlarms.count, 2, "Apenas 1 principal e 1 resgate agendados")
     }
 
+    func testRemovingBarcodeCanBeSavedWithoutLeavingAnActiveQRAlarm() async throws {
+        let original = Alarm(time: Date().addingTimeInterval(3600), missionType: .barcode, registeredBarcode: "REGISTERED")
+        try store.addAlarm(original)
+        try await coordinator.enableAlarm(original)
+        var draft = try XCTUnwrap(store.alarm(for: original.id))
+        draft.registeredBarcode = nil
+        draft.isEnabled = false
+        try await coordinator.saveAlarm(draft)
+        XCTAssertNil(store.alarm(for: original.id)?.registeredBarcode)
+        XCTAssertEqual(store.alarm(for: original.id)?.isEnabled, false)
+        XCTAssertTrue(mockKit.scheduledAlarms.isEmpty)
+        do {
+            try await coordinator.enableAlarm(draft)
+            XCTFail("QR alarms without a code must not be enabled")
+        } catch { }
+        XCTAssertTrue(mockKit.scheduledAlarms.isEmpty)
+    }
+
     func testFailedEditPreservesOriginalConfigurationAndSchedules() async throws {
         let original = Alarm(time: Date().addingTimeInterval(3600), label: "Original", missionType: .math)
         try store.addAlarm(original)

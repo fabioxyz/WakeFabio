@@ -53,7 +53,7 @@ public struct AlarmEditView: View {
         self._label = State(initialValue: initial.label)
         self._isEnabled = State(initialValue: initial.isEnabled)
         self._repeatDays = State(initialValue: initial.repeatDays)
-        self._soundName = State(initialValue: initial.soundName)
+        self._soundName = State(initialValue: AlarmSoundCatalog.resolvedName(initial.soundName))
         self._missionType = State(initialValue: initial.missionType)
         self._registeredBarcode = State(initialValue: initial.registeredBarcode)
         self._mathDifficulty = State(initialValue: initial.mathDifficulty)
@@ -133,6 +133,7 @@ public struct AlarmEditView: View {
                                     .foregroundColor(.orange)
                             }
                             .buttonStyle(BorderlessButtonStyle())
+                            .accessibilityLabel("Ouvir \(item.title)")
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -141,6 +142,10 @@ public struct AlarmEditView: View {
                     }
                 }
                 
+                if let audioError = audioManager.lastAudioError {
+                    Text(audioError).font(.footnote).foregroundColor(.red)
+                }
+
                 // MARK: - Wake Up Check
                 Section(
                     header: Text("Checagem de Despertar (Wake Up Check)"),
@@ -240,6 +245,15 @@ public struct AlarmEditView: View {
                     }
                     .buttonStyle(BorderlessButtonStyle())
                 }
+                Button(role: .destructive) {
+                    registeredBarcode = nil
+                    isEnabled = false
+                    isTestingBarcode = false
+                    validationErrorMessage = nil
+                } label: {
+                    Label("Remover código", systemImage: "trash")
+                }
+                .buttonStyle(BorderlessButtonStyle())
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -249,6 +263,9 @@ public struct AlarmEditView: View {
                             .font(.headline)
                     }
                     Text("Escaneie um produto distante da cama (ex: pasta de dentes no WC) para desativar o alarme.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("Sem código registado, o alarme fica desativado. Podes guardar e registar outro mais tarde.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
@@ -294,7 +311,7 @@ public struct AlarmEditView: View {
         audioManager.stopPreview()
         
         // Validação: Se a missão for QR mas não houver código
-        if missionType == .barcode {
+        if missionType == .barcode && isEnabled {
             if registeredBarcode == nil || registeredBarcode?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
                 validationErrorMessage = "Atenção: É obrigatório escanear e registar um código QR/Barras antes de salvar com esta missão."
                 return

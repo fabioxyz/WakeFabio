@@ -90,6 +90,10 @@ public struct MainAlarmListView: View {
                                 .padding(.vertical, 12)
                         }
                         .disabled(isTransitioning || activeRingingOccurrence != nil || activeWakeUpCheckOccurrence != nil)
+                        Text("Feito por Fábio, para Fábio")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 10)
                     }
                 }
             }

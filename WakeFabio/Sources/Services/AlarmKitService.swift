@@ -145,7 +145,8 @@ public final class NativeAlarmKitService: AlarmKitSchedulingProtocol {
             schedule: schedule,
             attributes: attributes,
             secondaryIntent: missionIntent,
-            sound: .default
+            sound: AlarmSoundCatalog.url(for: soundName) == nil
+                ? .default : .named(AlarmSoundCatalog.resolvedName(soundName))
         )
         
         _ = try await AlarmManager.shared.schedule(id: id, configuration: configuration)

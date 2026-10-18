@@ -23,6 +23,10 @@ targets:
     deploymentTarget: "26.0"
     sources:
       - path: WakeFabio/Sources
+      - path: WakeFabio/Resources/OriginalSounds
+        buildPhase: resources
+        includes:
+          - "*.wav"
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.personal.wakefabio
       INFOPLIST_FILE: WakeFabio/Info.plist
